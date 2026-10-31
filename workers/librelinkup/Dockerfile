@@ -1,9 +1,8 @@
-FROM python:3.12-slim
+FROM node:22-bookworm-slim
 
-RUN useradd --create-home --uid 65532 app
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py .
-USER app
-ENTRYPOINT ["python", "-u", "main.py"]
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY index.js convert.js dotenv.js ./
+USER node
+ENTRYPOINT ["node", "index.js"]

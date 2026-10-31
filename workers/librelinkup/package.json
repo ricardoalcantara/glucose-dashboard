@@ -1,0 +1,18 @@
+{
+  "name": "glucose-dashboard-librelinkup",
+  "private": true,
+  "version": "1.0.0",
+  "description": "LibreLinkUp follower worker for glucose-dashboard",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.29.10",
+    "@diakem/libre-link-up-api-client": "0.7.2"
+  }
+}

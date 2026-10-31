@@ -29,9 +29,9 @@ services:
       API_KEY: ${API_KEY:?set API_KEY}
       LLU_EMAIL: ${LLU_EMAIL:-}
       LLU_PASSWORD: ${LLU_PASSWORD:-}
-      LLU_REGION: ${LLU_REGION:-}
       LLU_PATIENT_ID: ${LLU_PATIENT_ID:-}
       POLL_INTERVAL: ${POLL_INTERVAL:-60}
+      LLU_CLIENT_VERSION: ${LLU_CLIENT_VERSION:-4.16.0}
     depends_on:
       server:
         condition: service_healthy

@@ -46,9 +46,9 @@ That posts one reading per minute for the last 12 hours. Refresh the dashboard. 
 
 ## LibreLinkUp worker
 
-`workers/librelinkup` is a Python program using `pylibrelinkup` 0.11.2. That library was released on 17 October 2026 and is maintained. The Node client `@diakem/libre-link-up-api-client` last published in May 2025, so the worker is Python.
+`workers/librelinkup` is a Node program using `@diakem/libre-link-up-api-client` 0.7.2. It calls `readRaw()` and posts `ValueInMgPerDl`, because the library's `read()` helper uses the account's display unit.
 
-LibreLinkUp's API is unofficial and can change. The worker logs into a follower account, follows a regional redirect, refreshes the session on HTTP 401, and posts mg/dL values with UTC timestamps. See [workers/librelinkup/README.md](workers/librelinkup/README.md).
+LibreLinkUp's API is unofficial and can change. The client signs in, follows a regional redirect, and refreshes the session when a call fails. History from this client is the sharing-service graph, about 12 hours, plus the current measurement. Started from `workers/librelinkup`, it loads `.env` from that directory the same way the server does. See [workers/librelinkup/README.md](workers/librelinkup/README.md).
 
 ```bash
 # .env also needs LLU_EMAIL and LLU_PASSWORD
