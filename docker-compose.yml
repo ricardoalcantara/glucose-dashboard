@@ -1,0 +1,41 @@
+services:
+  server:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      LISTEN_ADDR: ":8080"
+      DB_PATH: /data/glucose.db
+      API_KEY: ${API_KEY:?set API_KEY}
+      DASH_PASSWORD: ${DASH_PASSWORD:-}
+      DISPLAY_TZ: ${DISPLAY_TZ:-America/Sao_Paulo}
+      TARGET_LOW: ${TARGET_LOW:-70}
+      TARGET_HIGH: ${TARGET_HIGH:-180}
+    volumes:
+      - glucose-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  librelinkup:
+    profiles: ["worker"]
+    build: ./workers/librelinkup
+    environment:
+      SERVER_URL: http://server:8080
+      API_KEY: ${API_KEY:?set API_KEY}
+      LLU_EMAIL: ${LLU_EMAIL:-}
+      LLU_PASSWORD: ${LLU_PASSWORD:-}
+      LLU_REGION: ${LLU_REGION:-}
+      LLU_PATIENT_ID: ${LLU_PATIENT_ID:-}
+      POLL_INTERVAL: ${POLL_INTERVAL:-60}
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  glucose-data:

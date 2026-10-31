@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glucose</title>
+<style>{{.CSS}}</style>
+</head>
+<body>
+<main>
+{{if .Empty}}
+  <h1 class="title">Glucose</h1>
+  <p class="empty">No glucose readings yet. Once a worker posts data, refresh this page to see the last 12 hours.</p>
+{{else}}
+  <h1 class="value {{.RangeClass}}">{{.LatestMgdl}} <span class="unit">mg/dL</span></h1>
+  <p class="when">{{.LatestWhen}} <span class="ago">{{.MinutesAgo}} min ago</span></p>
+  {{if .Stale}}<p class="stale" role="status">Stale data</p>{{end}}
+  <section class="panel">
+    <p class="window">Last 12 hours</p>
+    {{if .Chart.HasPoints}}
+    <svg class="chart" viewBox="{{.Chart.ViewBox}}" role="img" aria-label="{{.Chart.AriaLabel}}" preserveAspectRatio="xMidYMid meet">
+      {{with .Chart.Band}}<rect class="band" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}"></rect>{{end}}
+      {{range .Chart.YGrid}}
+      <line class="grid" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}"></line>
+      <text class="label" x="{{.LabelX}}" y="{{.LabelY}}" text-anchor="{{.Anchor}}">{{.Label}}</text>
+      {{end}}
+      {{range .Chart.XGrid}}
+      <line class="grid" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}"></line>
+      <text class="label" x="{{.LabelX}}" y="{{.LabelY}}" text-anchor="{{.Anchor}}">{{.Label}}</text>
+      {{end}}
+      <rect class="frame" x="{{.Chart.Frame.X}}" y="{{.Chart.Frame.Y}}" width="{{.Chart.Frame.W}}" height="{{.Chart.Frame.H}}"></rect>
+      {{range .Chart.Paths}}
+      <path class="line" d="{{.D}}"></path>
+      {{end}}
+      {{range .Chart.Dots}}
+      <circle class="dot" cx="{{.X}}" cy="{{.Y}}" r="3.5"></circle>
+      {{end}}
+      {{if .Chart.Marker.Show}}
+      <circle class="marker" cx="{{.Chart.Marker.X}}" cy="{{.Chart.Marker.Y}}" r="5.5"></circle>
+      {{end}}
+    </svg>
+    {{else}}
+    <p class="empty">No readings in the last 12 hours.</p>
+    {{end}}
+  </section>
+  {{if .Chart.HasPoints}}
+  <section class="stats" aria-label="Last 12 hours">
+    <div><span class="stat-label">Min</span><span class="stat-value">{{.Chart.Stats.Min}}</span></div>
+    <div><span class="stat-label">Max</span><span class="stat-value">{{.Chart.Stats.Max}}</span></div>
+    <div><span class="stat-label">Average</span><span class="stat-value">{{printf "%.1f" .Chart.Stats.Average}}</span></div>
+    <div><span class="stat-label">Below</span><span class="stat-value">{{printf "%.0f" .Chart.Stats.Below}}%</span></div>
+    <div><span class="stat-label">In range</span><span class="stat-value">{{printf "%.0f" .Chart.Stats.InRange}}%</span></div>
+    <div><span class="stat-label">Above</span><span class="stat-value">{{printf "%.0f" .Chart.Stats.Above}}%</span></div>
+  </section>
+  {{end}}
+{{end}}
+  <footer>
+    <p>Generated {{.Generated}}</p>
+    <p>Informational only. Not a medical device. Do not use for dosing decisions.</p>
+  </footer>
+</main>
+</body>
+</html>
