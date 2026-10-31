@@ -10,6 +10,7 @@ type readingJSON struct {
 	TS     string `json:"ts"`
 	Mgdl   int    `json:"mgdl"`
 	Source string `json:"source"`
+	Trend  string `json:"trend,omitempty"`
 }
 
 func (s *Server) getReadings(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +35,7 @@ func (s *Server) getReadings(w http.ResponseWriter, r *http.Request) {
 			TS:     row.TS.UTC().Format(time.RFC3339),
 			Mgdl:   row.Mgdl,
 			Source: row.Source,
+			Trend:  row.Trend,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

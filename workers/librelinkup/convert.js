@@ -25,10 +25,26 @@ function toReadings(raw) {
     if (mgdl === null) {
       continue;
     }
-    byMinute.set(date.toISOString().replace(/\.\d{3}Z$/, "Z"), mgdl);
+    const key = date.toISOString().replace(/\.\d{3}Z$/, "Z");
+    const previous = byMinute.get(key);
+    const trend = trendName(item.TrendArrow) || (previous && previous.trend) || "";
+    byMinute.set(key, { mgdl, trend });
   }
 
-  return [...byMinute.entries()].map(([ts, mgdl]) => ({ ts, mgdl }));
+  return [...byMinute.entries()].map(([ts, sample]) => {
+    const reading = { ts, mgdl: sample.mgdl };
+    if (sample.trend) {
+      reading.trend = sample.trend;
+    }
+    return reading;
+  });
+}
+
+function trendName(arrow) {
+  if (typeof arrow !== "number" || !Number.isInteger(arrow)) {
+    return "";
+  }
+  return ["", "SingleDown", "FortyFiveDown", "Flat", "FortyFiveUp", "SingleUp"][arrow] || "";
 }
 
 function roundHalfUp(value) {

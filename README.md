@@ -2,7 +2,9 @@
 
 A small single-user service that stores CGM readings and shows the last 12 hours on one page. Integrations live in separate workers and push data over HTTP. The page is informational. It is not a medical device and it does not recommend doses.
 
-The chart is drawn on the server as inline SVG. There is no JavaScript and the page does not refresh itself. Reload the browser to see new readings.
+The chart is drawn on the server as inline SVG. The page reloads every 30 seconds to show new readings.
+
+![Glucose chart for the last 12 hours, with the current trend and a one-hour forecast.](docs/dashboard.jpg)
 
 ## Run locally
 
@@ -94,7 +96,7 @@ go test ./...
 - SQLite uses the pure-Go `modernc.org/sqlite` driver, WAL mode, a 5 second busy timeout, and a single open connection.
 - A minute is the primary key. Posting the same minute again overwrites it, so workers can resend history.
 - Invalid readings in a batch are listed in `rejected` and do not drop the valid ones. More than 2000 readings, or a body over 1 MB, rejects the whole request.
-- The chart window is the constant `chartWindow` (12 hours) in `internal/web`. The line breaks when two readings are more than 5 minutes apart. A single reading is a dot. The vertical axis is 40–400 mg/dL unless a point falls outside, in which case the edge moves out to a multiple of 50.
+- The chart window is the constant `chartWindow` (12 hours) in `internal/web`, drawn through one hour ahead. A falling forecast stops at the low target when it would cross it inside that hour, and the caption also gives the time a slope passes the high target inside that hour. Every reading in the window is joined by one line. A single reading is a dot. The vertical axis is 40–400 mg/dL unless a point falls outside, in which case the edge moves out to a multiple of 50.
 - Time in range counts stored minutes in the window. Missing minutes are left out of the percentage.
 - `store.List` returns plain readings. A future `internal/forecast` package can call it without changing the API or the page.
 - There is no retention job. `GET /api/v1/readings` can return at most 7 days per request. Older rows stay in the database.

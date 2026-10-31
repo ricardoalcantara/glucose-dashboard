@@ -9,6 +9,7 @@
   --grid: #d7e0e8;
   --frame: #c3cfd9;
   --marker: #14202b;
+  --forecast: #c026d3;
   --low: #c2410c;
   --in-range: #0f766e;
   --high: #b45309;
@@ -28,6 +29,7 @@
     --grid: #2a3846;
     --frame: #3d5164;
     --marker: #f8fafc;
+    --forecast: #e879f9;
     --low: #fb923c;
     --in-range: #5eead4;
     --high: #fbbf24;
@@ -74,6 +76,19 @@ h1.value .unit {
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0;
+}
+
+h1.value .trend {
+  font-size: 0.32em;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+h1.value .trend-label {
+  font-size: 0.72em;
+  font-weight: 600;
 }
 
 h1.value.low { color: var(--low); }
@@ -143,6 +158,60 @@ svg.chart {
 }
 
 .dot { fill: var(--line); }
+
+.line.forecast {
+  stroke: var(--forecast);
+  stroke-dasharray: 2 5;
+}
+
+.now {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.forecasts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 16px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.forecasts .unit {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 4px 12px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.key {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top-width: 2px;
+  border-top-style: solid;
+}
+
+.key.history { border-top-color: var(--line); }
+.key.forecast {
+  border-top-color: var(--forecast);
+  border-top-style: dashed;
+}
 
 .marker {
   fill: var(--marker);

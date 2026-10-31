@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -140,6 +141,79 @@ func TestListOrdersByTime(t *testing.T) {
 	}
 	if len(outside) != 0 {
 		t.Fatalf("outside = %+v", outside)
+	}
+}
+
+func TestTrendIsKeptWhenALaterPostOmitsIt(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	minute := time.Date(2026, 10, 31, 14, 3, 0, 0, time.UTC)
+
+	if _, _, err := s.Upsert(ctx, []model.Reading{{
+		TS: minute, Mgdl: 100, Source: "a", Trend: "Flat",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Upsert(ctx, []model.Reading{{
+		TS: minute, Mgdl: 110, Source: "b",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := s.Latest(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Mgdl != 110 || got.Source != "b" || got.Trend != "Flat" {
+		t.Fatalf("omitted trend erased the stored arrow: %+v", got)
+	}
+
+	if _, _, err := s.Upsert(ctx, []model.Reading{{
+		TS: minute, Mgdl: 112, Source: "c", Trend: "SingleUp",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.List(ctx, minute, minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Trend != "SingleUp" || rows[0].Mgdl != 112 {
+		t.Fatalf("rows = %+v", rows)
+	}
+}
+
+func TestOpenAddsTrendToAnExistingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "glucose.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+CREATE TABLE glucose (
+	ts INTEGER PRIMARY KEY,
+	mgdl INTEGER NOT NULL,
+	source TEXT NOT NULL,
+	received_at INTEGER NOT NULL
+)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	minute := time.Date(2026, 10, 31, 14, 3, 0, 0, time.UTC)
+	if _, _, err := s.Upsert(context.Background(), []model.Reading{{
+		TS: minute, Mgdl: 99, Source: "old", Trend: "Flat",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := s.Latest(context.Background())
+	if err != nil || !ok || got.Trend != "Flat" {
+		t.Fatalf("latest ok=%v err=%v reading=%+v", ok, err, got)
 	}
 }
 

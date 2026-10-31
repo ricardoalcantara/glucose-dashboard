@@ -8,5 +8,6 @@ type Reading struct {
 	TS         time.Time
 	Mgdl       int
 	Source     string
+	Trend      string
 	ReceivedAt time.Time
 }

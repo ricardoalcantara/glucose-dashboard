@@ -59,6 +59,8 @@ type pageData struct {
 	MinutesAgo int
 	Stale      bool
 	RangeClass string
+	TrendArrow string
+	TrendLabel string
 	Chart      Chart
 	Generated  string
 }
@@ -95,6 +97,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		data.MinutesAgo = int(age / time.Minute)
 		data.Stale = age > staleAfter
 		data.RangeClass = rangeClass(latest.Mgdl, h.TargetLow, h.TargetHigh)
+		data.TrendArrow, data.TrendLabel = trendView(latest.Trend)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -102,6 +105,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if err := h.tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
 		slog.Error("render page", "err", err)
+	}
+}
+
+func trendView(name string) (arrow, label string) {
+	switch name {
+	case "SingleDown":
+		return "↓", "falling quickly"
+	case "FortyFiveDown":
+		return "↘", "falling"
+	case "Flat":
+		return "→", "steady"
+	case "FortyFiveUp":
+		return "↗", "rising"
+	case "SingleUp":
+		return "↑", "rising quickly"
+	default:
+		return "", ""
 	}
 }
 

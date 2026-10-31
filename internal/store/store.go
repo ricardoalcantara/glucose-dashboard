@@ -54,9 +54,14 @@ CREATE TABLE IF NOT EXISTS glucose (
 	ts INTEGER PRIMARY KEY,
 	mgdl INTEGER NOT NULL,
 	source TEXT NOT NULL,
-	received_at INTEGER NOT NULL
+	received_at INTEGER NOT NULL,
+	trend TEXT
 );`
 	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("open database")
+	}
+	if _, err := db.Exec(`ALTER TABLE glucose ADD COLUMN trend TEXT`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
 		db.Close()
 		return nil, fmt.Errorf("open database")
 	}
@@ -89,14 +94,19 @@ func (s *Store) Upsert(ctx context.Context, readings []model.Reading) (inserted,
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return 0, 0, err
 		}
+		var trend any
+		if reading.Trend != "" {
+			trend = reading.Trend
+		}
 		_, err = tx.ExecContext(ctx, `
-INSERT INTO glucose (ts, mgdl, source, received_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO glucose (ts, mgdl, source, received_at, trend)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(ts) DO UPDATE SET
 	mgdl = excluded.mgdl,
 	source = excluded.source,
-	received_at = excluded.received_at`,
-			ts, reading.Mgdl, reading.Source, receivedAt)
+	received_at = excluded.received_at,
+	trend = COALESCE(excluded.trend, glucose.trend)`,
+			ts, reading.Mgdl, reading.Source, receivedAt, trend)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -115,7 +125,7 @@ ON CONFLICT(ts) DO UPDATE SET
 // List returns readings with stored timestamps in [from, to], oldest first.
 func (s *Store) List(ctx context.Context, from, to time.Time) ([]model.Reading, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT ts, mgdl, source, received_at
+SELECT ts, mgdl, source, received_at, trend
 FROM glucose
 WHERE ts >= ? AND ts <= ?
 ORDER BY ts ASC`, from.UTC().Unix(), to.UTC().Unix())
@@ -141,13 +151,14 @@ ORDER BY ts ASC`, from.UTC().Unix(), to.UTC().Unix())
 // Latest returns the newest reading. ok is false when the table is empty.
 func (s *Store) Latest(ctx context.Context) (model.Reading, bool, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT ts, mgdl, source, received_at
+SELECT ts, mgdl, source, received_at, trend
 FROM glucose
 ORDER BY ts DESC
 LIMIT 1`)
 	var ts, received int64
+	var trend sql.NullString
 	var reading model.Reading
-	err := row.Scan(&ts, &reading.Mgdl, &reading.Source, &received)
+	err := row.Scan(&ts, &reading.Mgdl, &reading.Source, &received, &trend)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Reading{}, false, nil
 	}
@@ -156,6 +167,9 @@ LIMIT 1`)
 	}
 	reading.TS = time.Unix(ts, 0).UTC()
 	reading.ReceivedAt = time.Unix(received, 0).UTC()
+	if trend.Valid {
+		reading.Trend = trend.String
+	}
 	return reading, true, nil
 }
 
@@ -165,11 +179,15 @@ type scanner interface {
 
 func scanReading(row scanner) (model.Reading, error) {
 	var ts, received int64
+	var trend sql.NullString
 	var reading model.Reading
-	if err := row.Scan(&ts, &reading.Mgdl, &reading.Source, &received); err != nil {
+	if err := row.Scan(&ts, &reading.Mgdl, &reading.Source, &received, &trend); err != nil {
 		return model.Reading{}, err
 	}
 	reading.TS = time.Unix(ts, 0).UTC()
 	reading.ReceivedAt = time.Unix(received, 0).UTC()
+	if trend.Valid {
+		reading.Trend = trend.String
+	}
 	return reading, nil
 }

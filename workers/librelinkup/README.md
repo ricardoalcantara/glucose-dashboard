@@ -4,7 +4,7 @@ Reads glucose from an Abbott LibreLinkUp **follower** account and posts it to th
 
 The LibreLinkUp HTTP API is unofficial. Abbott can change it without notice, and this worker will break when that happens. It uses [`@diakem/libre-link-up-api-client` 0.7.2](https://github.com/DiaKEM/libre-link-up-api-client). The published package calls `@babel/runtime` without listing it, so this worker depends on that runtime directly.
 
-The library's `read()` helper reports `Value`, which follows the account's display unit. This worker calls `readRaw()` and sends `ValueInMgPerDl` instead, rounded half-up to an integer. Timestamps come from `FactoryTimestamp`, treated as UTC the same way the library does. The dashboard source name is `librelinkup`.
+The library's `read()` helper reports `Value`, which follows the account's display unit. This worker calls `readRaw()` and sends `ValueInMgPerDl` instead, rounded half-up to an integer. Timestamps come from `FactoryTimestamp`, treated as UTC the same way the library does. When a sample has a computable `TrendArrow` (`1` through `5`), the worker also posts `trend`. The dashboard source name is `librelinkup`.
 
 This client returns the sharing-service graph (about 12 hours) and the current measurement. It does not expose the longer logbook, so each poll sends that graph. Overlapping minutes are safe to resend.
 

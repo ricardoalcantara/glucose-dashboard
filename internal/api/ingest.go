@@ -18,8 +18,9 @@ type ingestRequest struct {
 }
 
 type rawReading struct {
-	TS   string          `json:"ts"`
-	Mgdl json.RawMessage `json:"mgdl"`
+	TS    string          `json:"ts"`
+	Mgdl  json.RawMessage `json:"mgdl"`
+	Trend json.RawMessage `json:"trend"`
 }
 
 type ingestResponse struct {
@@ -99,10 +100,36 @@ func validateReading(item rawReading, now time.Time) (model.Reading, string) {
 	if reason != "" {
 		return model.Reading{}, reason
 	}
+	trend, reason := parseTrend(item.Trend)
+	if reason != "" {
+		return model.Reading{}, reason
+	}
 	return model.Reading{
-		TS:   ts.UTC().Truncate(time.Minute),
-		Mgdl: mgdl,
+		TS:    ts.UTC().Truncate(time.Minute),
+		Mgdl:  mgdl,
+		Trend: trend,
 	}, ""
+}
+
+func parseTrend(raw json.RawMessage) (string, string) {
+	trimmed := bytesTrim(raw)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return "", ""
+	}
+	var value string
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return "", "trend_invalid"
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", ""
+	}
+	switch value {
+	case "SingleDown", "FortyFiveDown", "Flat", "FortyFiveUp", "SingleUp":
+		return value, ""
+	default:
+		return "", "trend_invalid"
+	}
 }
 
 func parseMgdl(raw json.RawMessage) (int, string) {

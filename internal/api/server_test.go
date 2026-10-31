@@ -174,6 +174,57 @@ func TestBearerAuth(t *testing.T) {
 	}
 }
 
+func TestTrendIsOptionalAndInvalidTrendIsRejected(t *testing.T) {
+	st, h := testMux(t, "")
+	rec := postJSON(t, h, "test-key", map[string]any{
+		"source": "librelinkup",
+		"readings": []any{
+			map[string]any{"ts": "2026-10-31T14:00:00Z", "mgdl": 110, "trend": "Flat"},
+			map[string]any{"ts": "2026-10-31T14:01:00Z", "mgdl": 112, "trend": "sideways"},
+			map[string]any{"ts": "2026-10-31T14:02:00Z", "mgdl": 114, "trend": nil},
+		},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp ingestResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Inserted != 2 || len(resp.Rejected) != 1 || resp.Rejected[0].Reason != "trend_invalid" || resp.Rejected[0].Index != 1 {
+		t.Fatalf("response = %+v", resp)
+	}
+
+	rec = postJSON(t, h, "test-key", map[string]any{
+		"source": "librelinkup",
+		"readings": []any{
+			map[string]any{"ts": "2026-10-31T14:00:00Z", "mgdl": 111},
+		},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/readings?from=2026-10-31T14:00:00Z&to=2026-10-31T14:02:00Z", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var rows []readingJSON
+	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].Trend != "Flat" || rows[0].Mgdl != 111 || rows[1].Trend != "" {
+		t.Fatalf("rows = %+v", rows)
+	}
+	if strings.Contains(rec.Body.String(), `"trend":""`) {
+		t.Fatal("empty trend was serialized")
+	}
+	stored, err := st.List(t.Context(), time.Date(2026, 10, 31, 14, 0, 0, 0, time.UTC), time.Date(2026, 10, 31, 14, 2, 0, 0, time.UTC))
+	if err != nil || len(stored) != 2 || stored[0].Trend != "Flat" {
+		t.Fatalf("stored err=%v rows=%+v", err, stored)
+	}
+}
+
 func TestGetReadings(t *testing.T) {
 	_, h := testMux(t, "")
 	postJSON(t, h, "test-key", map[string]any{

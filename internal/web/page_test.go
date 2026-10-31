@@ -39,16 +39,26 @@ func TestPageEmptyAndWithReadings(t *testing.T) {
 		`class="value in-range"`,
 		`role="img"`,
 		"Latest 112 mg/dL",
+		"Forecast +1h unavailable",
+		"1 hour ahead",
 		"prefers-color-scheme",
 	} {
 		if !strings.Contains(fresh, want) {
 			t.Fatalf("fresh page missing %q", want)
 		}
 	}
-	if strings.Contains(fresh, "Stale data") {
-		t.Fatal("fresh reading was marked stale")
+	if strings.Contains(fresh, "Stale data") || strings.Contains(fresh, "class=\"trend\"") {
+		t.Fatal("fresh reading without a trend showed a trend or a stale flag")
 	}
 	assertCommonPage(t, fresh)
+
+	trending := render(t, loc, now, []model.Reading{{
+		TS: now.Add(-2 * time.Minute), Mgdl: 112, Source: "test", Trend: "SingleUp",
+	}})
+	if !strings.Contains(trending, "↑") || !strings.Contains(trending, "rising quickly") {
+		t.Fatalf("trend page = %s", trending)
+	}
+	assertCommonPage(t, trending)
 
 	stale := render(t, loc, now, []model.Reading{{
 		TS: now.Add(-20 * time.Minute), Mgdl: 54, Source: "test",
@@ -69,14 +79,49 @@ func TestPageEmptyAndWithReadings(t *testing.T) {
 	}
 }
 
+func TestPageForecastCrossings(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+
+	low := render(t, time.UTC, now, []model.Reading{
+		{TS: now.Add(-15 * time.Minute), Mgdl: 130, Source: "test"},
+		{TS: now, Mgdl: 100, Source: "test"},
+	})
+	if !strings.Contains(low, "Hits 70 at <strong>15:15</strong>") {
+		t.Fatalf("low page missing hit time: %s", low)
+	}
+	if !strings.Contains(low, "Hits 70</span>") {
+		t.Fatal("legend did not follow the low crossing")
+	}
+	if strings.Contains(low, "Forecast +1h <strong>") || strings.Contains(low, "-20") {
+		t.Fatal("low page kept an extrapolated glucose value")
+	}
+
+	high := render(t, time.UTC, now, []model.Reading{
+		{TS: now.Add(-15 * time.Minute), Mgdl: 100, Source: "test"},
+		{TS: now, Mgdl: 160, Source: "test"},
+	})
+	for _, want := range []string{
+		"Forecast +1h <strong>400</strong>",
+		"at 16:00",
+		"Passes 180 at <strong>15:05</strong>",
+		"Forecast +1h</span>",
+	} {
+		if !strings.Contains(high, want) {
+			t.Fatalf("high page missing %q", want)
+		}
+	}
+}
+
 func assertCommonPage(t *testing.T, body string) {
 	t.Helper()
 	if !strings.Contains(body, "Informational only. Not a medical device. Do not use for dosing decisions.") {
 		t.Fatal("missing disclaimer")
 	}
-	lower := strings.ToLower(body)
-	if strings.Contains(lower, "<script") || strings.Contains(lower, "http-equiv") {
-		t.Fatal("page includes script or a refresh directive")
+	if !strings.Contains(body, "location.reload()") || !strings.Contains(body, "30000") {
+		t.Fatal("page missing 30-second reload")
+	}
+	if strings.Contains(strings.ToLower(body), "http-equiv") {
+		t.Fatal("page includes a refresh directive")
 	}
 }
 

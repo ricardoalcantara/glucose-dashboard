@@ -10,14 +10,34 @@
 <main>
 {{if .Empty}}
   <h1 class="title">Glucose</h1>
-  <p class="empty">No glucose readings yet. Once a worker posts data, refresh this page to see the last 12 hours.</p>
+  <p class="empty">No glucose readings yet. Once a worker posts data, this page reloads every 30 seconds to show the last 12 hours.</p>
 {{else}}
-  <h1 class="value {{.RangeClass}}">{{.LatestMgdl}} <span class="unit">mg/dL</span></h1>
+  <h1 class="value {{.RangeClass}}">{{.LatestMgdl}} <span class="unit">mg/dL</span>{{if .TrendLabel}} <span class="trend" title="{{.TrendLabel}}">{{.TrendArrow}} <span class="trend-label">{{.TrendLabel}}</span></span>{{end}}</h1>
   <p class="when">{{.LatestWhen}} <span class="ago">{{.MinutesAgo}} min ago</span></p>
   {{if .Stale}}<p class="stale" role="status">Stale data</p>{{end}}
+  {{if .Chart.HasPoints}}
+  <p class="forecasts">
+    {{if .Chart.Forecast.Show}}
+      {{if .Chart.Forecast.HitsLow}}
+      <span>Hits {{.Chart.Forecast.Low}} at <strong>{{.Chart.Forecast.At}}</strong></span>
+      {{else}}
+      <span>Forecast +1h <strong>{{.Chart.Forecast.Mgdl}}</strong> <span class="unit">mg/dL</span> at {{.Chart.Forecast.At}}</span>
+      {{end}}
+    {{else}}
+    <span>Forecast +1h unavailable</span>
+    {{end}}
+    {{if .Chart.Forecast.HitsHigh}}
+    <span>Passes {{.Chart.Forecast.High}} at <strong>{{.Chart.Forecast.HighAt}}</strong></span>
+    {{end}}
+  </p>
+  {{end}}
   <section class="panel">
-    <p class="window">Last 12 hours</p>
+    <p class="window">Last 12 hours, 1 hour ahead</p>
     {{if .Chart.HasPoints}}
+    <p class="legend">
+      <span><i class="key history"></i> History</span>
+      <span><i class="key forecast"></i> {{if .Chart.Forecast.HitsLow}}Hits {{.Chart.Forecast.Low}}{{else}}Forecast +1h{{end}}</span>
+    </p>
     <svg class="chart" viewBox="{{.Chart.ViewBox}}" role="img" aria-label="{{.Chart.AriaLabel}}" preserveAspectRatio="xMidYMid meet">
       {{with .Chart.Band}}<rect class="band" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}"></rect>{{end}}
       {{range .Chart.YGrid}}
@@ -29,11 +49,15 @@
       <text class="label" x="{{.LabelX}}" y="{{.LabelY}}" text-anchor="{{.Anchor}}">{{.Label}}</text>
       {{end}}
       <rect class="frame" x="{{.Chart.Frame.X}}" y="{{.Chart.Frame.Y}}" width="{{.Chart.Frame.W}}" height="{{.Chart.Frame.H}}"></rect>
+      <line class="now" x1="{{.Chart.Now.X1}}" y1="{{.Chart.Now.Y1}}" x2="{{.Chart.Now.X2}}" y2="{{.Chart.Now.Y2}}"></line>
       {{range .Chart.Paths}}
       <path class="line" d="{{.D}}"></path>
       {{end}}
       {{range .Chart.Dots}}
       <circle class="dot" cx="{{.X}}" cy="{{.Y}}" r="3.5"></circle>
+      {{end}}
+      {{range .Chart.Forecast.Paths}}
+      <path class="line forecast" d="{{.D}}"></path>
       {{end}}
       {{if .Chart.Marker.Show}}
       <circle class="marker" cx="{{.Chart.Marker.X}}" cy="{{.Chart.Marker.Y}}" r="5.5"></circle>
@@ -59,5 +83,8 @@
     <p>Informational only. Not a medical device. Do not use for dosing decisions.</p>
   </footer>
 </main>
+<script>
+  setTimeout(function () { location.reload(); }, 30000);
+</script>
 </body>
 </html>

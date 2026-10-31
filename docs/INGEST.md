@@ -22,7 +22,7 @@ Batch upsert. The body is at most 1 MB and at most 2000 readings. A larger body 
 {
   "source": "librelinkup",
   "readings": [
-    { "ts": "2026-10-31T14:03:00Z", "mgdl": 112 },
+    { "ts": "2026-10-31T14:03:00Z", "mgdl": 112, "trend": "Flat" },
     { "ts": "2026-10-31T14:04:00Z", "mgdl": 114 }
   ]
 }
@@ -31,6 +31,7 @@ Batch upsert. The body is at most 1 MB and at most 2000 readings. A larger body 
 - `source` is a non-empty string stored with each accepted reading. Use a stable name for the integration, such as `librelinkup`.
 - `ts` is RFC3339. The server stores UTC, truncated to the minute. A second sample in the same minute overwrites the first. Sending the same data again is safe.
 - `mgdl` is a whole number from 20 to 600 inclusive. `112.0` is accepted. `112.5` is not.
+- `trend` is optional. Accepted values are `SingleDown`, `FortyFiveDown`, `Flat`, `FortyFiveUp`, and `SingleUp`. A missing field, `null`, or `""` leaves the trend unknown. A later post that omits `trend` keeps the trend already stored for that minute. Any other value rejects that item with `trend_invalid`.
 
 Success is `200`:
 
@@ -59,6 +60,7 @@ Invalid items do not fail the rest of the batch. Each rejected item is:
 | `timestamp_in_future` | `ts` is more than 5 minutes ahead of the server clock |
 | `mgdl_not_integer` | `mgdl` is missing, null, or not a whole number |
 | `mgdl_out_of_range` | `mgdl` is outside 20–600 |
+| `trend_invalid` | `trend` is present and is not one of the accepted names |
 
 ## `GET /api/v1/readings`
 
@@ -73,11 +75,11 @@ The response is a JSON array ordered by time, oldest first:
 
 ```json
 [
-  { "ts": "2026-10-31T14:03:00Z", "mgdl": 114, "source": "librelinkup" }
+  { "ts": "2026-10-31T14:03:00Z", "mgdl": 114, "source": "librelinkup", "trend": "Flat" }
 ]
 ```
 
-`ts` is the stored minute in UTC. Bounds are inclusive on that stored timestamp. A reading taken at `14:03:30` is stored as `14:03:00`, so a query that starts at `14:03:30` does not include it.
+`ts` is the stored minute in UTC. Bounds are inclusive on that stored timestamp. A reading taken at `14:03:30` is stored as `14:03:00`, so a query that starts at `14:03:30` does not include it. `trend` is omitted when that minute has no stored arrow.
 
 ## `GET /healthz`
 

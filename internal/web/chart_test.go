@@ -8,34 +8,30 @@ import (
 	"glucose-dashboard/internal/model"
 )
 
-func TestChartSplitsOnGaps(t *testing.T) {
+func TestChartConnectsAllReadings(t *testing.T) {
 	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
 	start := now.Add(-2 * time.Hour)
-
-	connected := BuildChart([]model.Reading{
-		{TS: start, Mgdl: 100},
-		{TS: start.Add(5 * time.Minute), Mgdl: 110},
-		{TS: start.Add(9 * time.Minute), Mgdl: 120},
-	}, now, time.UTC, 70, 180)
-	if len(connected.Paths) != 1 || len(connected.Dots) != 0 || !connected.Marker.Show {
-		t.Fatalf("5 minute gap paths=%d dots=%d marker=%v", len(connected.Paths), len(connected.Dots), connected.Marker.Show)
-	}
-
-	split := BuildChart([]model.Reading{
+	chart := BuildChart([]model.Reading{
 		{TS: start, Mgdl: 100},
 		{TS: start.Add(time.Minute), Mgdl: 105},
-		{TS: start.Add(7 * time.Minute), Mgdl: 130},
+		{TS: start.Add(2 * time.Hour), Mgdl: 130},
 	}, now, time.UTC, 70, 180)
-	if len(split.Paths) != 1 || len(split.Dots) != 1 {
-		t.Fatalf("gap over 5 minutes paths=%d dots=%d", len(split.Paths), len(split.Dots))
+	if len(chart.Paths) != 1 || len(chart.Dots) != 0 || !chart.Marker.Show {
+		t.Fatalf("paths=%d dots=%d marker=%v", len(chart.Paths), len(chart.Dots), chart.Marker.Show)
 	}
-
-	broken := BuildChart([]model.Reading{
-		{TS: start, Mgdl: 100},
-		{TS: start.Add(5*time.Minute + time.Second), Mgdl: 110},
-	}, now, time.UTC, 70, 180)
-	if len(broken.Paths) != 0 || len(broken.Dots) != 2 {
-		t.Fatalf("just over 5 minutes paths=%d dots=%d", len(broken.Paths), len(broken.Dots))
+	axisStart, axisEnd := now.Add(-chartWindow), now.Add(forecastHorizon)
+	for _, sample := range []struct {
+		ts   time.Time
+		mgdl int
+	}{
+		{start, 100},
+		{start.Add(time.Minute), 105},
+		{start.Add(2 * time.Hour), 130},
+	} {
+		needle := coord(xOf(axisStart, axisEnd, sample.ts)) + " " + coord(yOf(chart.YMin, chart.YMax, sample.mgdl))
+		if !strings.Contains(chart.Paths[0].D, needle) {
+			t.Fatalf("line misses %s", needle)
+		}
 	}
 }
 
@@ -128,4 +124,212 @@ func TestChartStatsAndLocalHourLabels(t *testing.T) {
 	if !kept.HasPoints {
 		t.Fatal("reading at the start of the window was dropped")
 	}
+	if !strings.Contains(joined, "13:00") {
+		t.Fatalf("future hour missing from labels = %s", joined)
+	}
+}
+
+func TestChartShowsOneHourAheadWithoutCopyingHistory(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	recent := now.Add(-30 * time.Minute)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-90 * time.Minute), Mgdl: 80},
+		{TS: recent, Mgdl: 100},
+		{TS: now, Mgdl: 110},
+	}, now, time.UTC, 70, 180)
+
+	if chart.Forecast.Show || len(chart.Forecast.Paths) != 0 {
+		t.Fatalf("history was copied ahead: %+v", chart.Forecast)
+	}
+	start, end := now.Add(-chartWindow), now.Add(forecastHorizon)
+	needle := coord(xOf(start, end, recent.Add(time.Hour))) + " " + coord(yOf(chart.YMin, chart.YMax, 100))
+	for _, path := range chart.Paths {
+		if strings.Contains(path.D, needle) {
+			t.Fatal("a past reading was drawn one hour later")
+		}
+	}
+	if chart.Now.X1 != coord(xOf(start, end, now)) || chart.Now.X1 != chart.Now.X2 {
+		t.Fatalf("now line = %+v", chart.Now)
+	}
+	labels := make([]string, 0, len(chart.XGrid))
+	for _, line := range chart.XGrid {
+		labels = append(labels, line.Label)
+	}
+	if !strings.Contains(strings.Join(labels, ","), "16:00") {
+		t.Fatalf("axis does not reach the next hour: %s", strings.Join(labels, ","))
+	}
+}
+
+func TestSlopeForecastProjectsOneHour(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-2 * time.Hour), Mgdl: 90},
+		{TS: now.Add(-15 * time.Minute), Mgdl: 100},
+		{TS: now, Mgdl: 115},
+	}, now, time.UTC, 70, 180)
+
+	if !chart.Forecast.Show || chart.Forecast.HitsLow || chart.Forecast.HitsHigh || chart.Forecast.Mgdl != 175 || chart.Forecast.At != "16:00" {
+		t.Fatalf("forecast = %+v", chart.Forecast)
+	}
+	if len(chart.Forecast.Paths) != 1 {
+		t.Fatalf("forecast paths = %d", len(chart.Forecast.Paths))
+	}
+	start, end := now.Add(-chartWindow), now.Add(forecastHorizon)
+	if !forecastHas(chart.Forecast, start, end, chart.YMin, chart.YMax, now.Add(time.Hour), 175) {
+		t.Fatal("slope endpoint was not drawn one hour after the latest reading")
+	}
+	if chart.Stats.Min != 90 || chart.Stats.Max != 115 || chart.Stats.Average != 101.66666666666667 {
+		t.Fatalf("stats included the forecast: %+v", chart.Stats)
+	}
+	if chart.YMax != 400 {
+		t.Fatalf("in-range forecast changed the domain: %d", chart.YMax)
+	}
+}
+
+func TestSlopeForecastRoundsHalfUp(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-8 * time.Minute), Mgdl: 100},
+		{TS: now, Mgdl: 101},
+	}, now, time.UTC, 70, 180)
+	if !chart.Forecast.Show || chart.Forecast.Mgdl != 109 {
+		t.Fatalf("half-up forecast = %+v", chart.Forecast)
+	}
+	if chart.Stats.Max != 101 {
+		t.Fatalf("stats max = %d", chart.Stats.Max)
+	}
+}
+
+func TestSlopeForecastNeedsTwoRecentPoints(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-2 * time.Minute), Mgdl: 112},
+	}, now, time.UTC, 70, 180)
+	if chart.Forecast.Show || len(chart.Forecast.Paths) != 0 {
+		t.Fatalf("single point set a forecast: %+v", chart.Forecast)
+	}
+	if !strings.Contains(chart.AriaLabel, "Forecast plus 1 hour unavailable") {
+		t.Fatalf("aria = %q", chart.AriaLabel)
+	}
+}
+
+func TestForecastExtendsYDomain(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-15 * time.Minute), Mgdl: 350},
+		{TS: now, Mgdl: 400},
+	}, now, time.UTC, 70, 180)
+	if chart.Forecast.Mgdl != 600 || chart.Forecast.HitsHigh || chart.Forecast.HitsLow {
+		t.Fatalf("forecast = %+v", chart.Forecast)
+	}
+	if chart.YMax != 600 {
+		t.Fatalf("domain max = %d", chart.YMax)
+	}
+	if chart.Stats.Max != 400 {
+		t.Fatalf("stats max = %d", chart.Stats.Max)
+	}
+}
+
+func TestSlopeForecastStopsAtLowTarget(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-15 * time.Minute), Mgdl: 130},
+		{TS: now, Mgdl: 100},
+	}, now, time.UTC, 70, 180)
+
+	if !chart.Forecast.Show || !chart.Forecast.HitsLow || chart.Forecast.Low != 70 || chart.Forecast.Mgdl != 70 || chart.Forecast.At != "15:15" {
+		t.Fatalf("forecast = %+v", chart.Forecast)
+	}
+	if chart.Forecast.HitsHigh {
+		t.Fatal("drop from 100 was treated as passing 180")
+	}
+	if chart.YMin != 40 || chart.YMax != 400 {
+		t.Fatalf("domain = %d..%d", chart.YMin, chart.YMax)
+	}
+	start, end := now.Add(-chartWindow), now.Add(forecastHorizon)
+	if !forecastHas(chart.Forecast, start, end, chart.YMin, chart.YMax, now.Add(15*time.Minute), 70) {
+		t.Fatal("forecast line did not end at 70")
+	}
+	if strings.Contains(chart.AriaLabel, "Forecast plus 1 hour") || !strings.Contains(chart.AriaLabel, "Hits 70 mg/dL at 15:15.") {
+		t.Fatalf("aria = %q", chart.AriaLabel)
+	}
+}
+
+func TestSlopeForecastFloorsNegativeAtZero(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-15 * time.Minute), Mgdl: 55},
+		{TS: now, Mgdl: 40},
+	}, now, time.UTC, 70, 180)
+
+	if !chart.Forecast.Show || chart.Forecast.HitsLow || chart.Forecast.Mgdl != 0 || chart.Forecast.At != "15:40" {
+		t.Fatalf("forecast = %+v", chart.Forecast)
+	}
+	if chart.YMin != 0 {
+		t.Fatalf("domain min = %d", chart.YMin)
+	}
+	start, end := now.Add(-chartWindow), now.Add(forecastHorizon)
+	if !forecastHas(chart.Forecast, start, end, chart.YMin, chart.YMax, now.Add(40*time.Minute), 0) {
+		t.Fatal("forecast line did not end at 0")
+	}
+	if strings.Contains(chart.AriaLabel, "-") || !strings.Contains(chart.AriaLabel, "Forecast plus 1 hour 0 mg/dL.") {
+		t.Fatalf("aria = %q", chart.AriaLabel)
+	}
+}
+
+func TestSlopeForecastPassesHighTarget(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-15 * time.Minute), Mgdl: 100},
+		{TS: now, Mgdl: 160},
+	}, now, time.UTC, 70, 180)
+
+	if !chart.Forecast.Show || chart.Forecast.HitsLow || chart.Forecast.Mgdl != 400 || chart.Forecast.At != "16:00" {
+		t.Fatalf("forecast = %+v", chart.Forecast)
+	}
+	if !chart.Forecast.HitsHigh || chart.Forecast.High != 180 || chart.Forecast.HighAt != "15:05" {
+		t.Fatalf("high crossing = %+v", chart.Forecast)
+	}
+	start, end := now.Add(-chartWindow), now.Add(forecastHorizon)
+	if !forecastHas(chart.Forecast, start, end, chart.YMin, chart.YMax, now.Add(time.Hour), 400) {
+		t.Fatal("forecast line did not run to the one-hour endpoint")
+	}
+	if !strings.Contains(chart.AriaLabel, "Forecast plus 1 hour 400 mg/dL.") || !strings.Contains(chart.AriaLabel, "Passes 180 mg/dL at 15:05.") {
+		t.Fatalf("aria = %q", chart.AriaLabel)
+	}
+}
+
+func TestSlopeForecastDropCrossesBothTargets(t *testing.T) {
+	now := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	chart := BuildChart([]model.Reading{
+		{TS: now.Add(-12 * time.Minute), Mgdl: 250},
+		{TS: now, Mgdl: 190},
+	}, now, time.UTC, 70, 180)
+
+	if !chart.Forecast.HitsLow || chart.Forecast.At != "15:24" || chart.Forecast.Mgdl != 70 {
+		t.Fatalf("forecast = %+v", chart.Forecast)
+	}
+	if !chart.Forecast.HitsHigh || chart.Forecast.HighAt != "15:02" {
+		t.Fatalf("high crossing = %+v", chart.Forecast)
+	}
+	if chart.YMin != 40 {
+		t.Fatalf("domain min = %d", chart.YMin)
+	}
+	start, end := now.Add(-chartWindow), now.Add(forecastHorizon)
+	if !forecastHas(chart.Forecast, start, end, chart.YMin, chart.YMax, now.Add(24*time.Minute), 70) {
+		t.Fatal("forecast line did not stop at 70")
+	}
+	if !strings.Contains(chart.AriaLabel, "Hits 70 mg/dL at 15:24.") || !strings.Contains(chart.AriaLabel, "Passes 180 mg/dL at 15:02.") {
+		t.Fatalf("aria = %q", chart.AriaLabel)
+	}
+}
+
+func forecastHas(forecast Forecast, start, end time.Time, yMin, yMax int, ts time.Time, mgdl int) bool {
+	needle := coord(xOf(start, end, ts)) + " " + coord(yOf(yMin, yMax, mgdl))
+	for _, path := range forecast.Paths {
+		if strings.Contains(path.D, needle) {
+			return true
+		}
+	}
+	return false
 }
