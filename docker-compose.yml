@@ -1,5 +1,6 @@
 services:
   server:
+    image: ghcr.io/ricardoalcantara/glucose-portal:${IMAGE_TAG:-latest}
     build: .
     ports:
       - "8080:8080"
@@ -23,6 +24,7 @@ services:
 
   librelinkup:
     profiles: ["worker"]
+    image: ghcr.io/ricardoalcantara/glucose-worker:${IMAGE_TAG:-latest}
     build: ./workers/librelinkup
     environment:
       SERVER_URL: http://server:8080

@@ -59,6 +59,39 @@ docker compose --profile worker up --build
 
 Without the `worker` profile, Compose starts only the dashboard.
 
+## Images
+
+Compose tags and pulls two GHCR images. `IMAGE_TAG` selects the tag and defaults to `latest`.
+
+| Image | Contents |
+| --- | --- |
+| `ghcr.io/ricardoalcantara/glucose-portal` | Dashboard server |
+| `ghcr.io/ricardoalcantara/glucose-worker` | LibreLinkUp worker |
+
+```bash
+IMAGE_TAG=v0.1.0 docker compose pull
+IMAGE_TAG=v0.1.0 docker compose --profile worker pull
+```
+
+`docker compose up --build` still builds from this repo and tags those same names. The first `v*` push creates the GHCR packages. They stay private until you make them public in the package settings.
+
+## Release
+
+Only a pushed `v*` tag publishes images.
+
+1. Land the change on `main` and push it.
+2. Choose a new `v*` tag that is not already on the repo, for example `v0.1.0`.
+3. From that commit:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+4. The Release workflow checks out that tag, runs `go test ./...` and `npm test` in `workers/librelinkup`, then pushes `linux/amd64` and `linux/arm64` for both images as `:v0.1.0` and `:latest`.
+5. Confirm the workflow on GitHub. Pull with `IMAGE_TAG=v0.1.0 docker compose pull`. Add `--profile worker` for the LibreLinkUp image. `latest` tracks the newest successful tag.
+6. To publish again, repeat from a newer commit with a new tag. Do not reuse a tag. Moving an existing tag does not replace the published images unless that tag is pushed again.
+
 ## Add a worker
 
 Workers are separate programs. They only need [docs/INGEST.md](docs/INGEST.md):
